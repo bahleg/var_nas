@@ -130,7 +130,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
         loss = model.train_step(trn_X, trn_y, val_X, val_y)
         losses.update(loss.item(), N)
 
-        if step == 0:# TODO len(train_loader)-1:
+        if step ==  len(train_loader)-1:
             logits = model(trn_X)
             prec1 = utils.accuracy(
                 logits, trn_y)[0]
@@ -145,7 +145,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
         
             writer.add_scalar('train/loss', loss.item(), cur_step)
             writer.add_scalar('train/top1', prec1.item(), cur_step)
-            break #TODO
+            
         cur_step += 1
 
     logger.info(
