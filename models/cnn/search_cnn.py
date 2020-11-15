@@ -95,11 +95,13 @@ class SearchCNNController(nn.Module):
         n_classes = int(subcfg['n_classes'])
         n_layers = int(subcfg['layers'])
         n_nodes = int(subcfg['n_nodes'])
-        stem_multiplier = int(subcfg['stem_multiplier'])        
+        stem_multiplier = int(subcfg['stem_multiplier'])     
+        sampling_mode = subcfg['sampling_mode']
         self.n_nodes = n_nodes        
         self.device = kwargs['device']
         self.criterion = nn.CrossEntropyLoss().to(self.device)        
-        self.t = 1
+        self.t = float(subcfg['init temp'])
+        self.delta_t = float(subcfg['delta temp'])
         # initialize architect parameters: alphas
         n_ops = len(ops.PRIMITIVES)
 
@@ -135,6 +137,7 @@ class SearchCNNController(nn.Module):
         self.simple_alpha_update = int(subcfg['optim']['simple_alpha_update'])!=0
         self.architect = Architect(self, float(subcfg['optim']['w_momentum']), float(subcfg['optim']['w_weight_decay']))
         self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
+
     def train_step(self, trn_X, trn_y, val_X, val_y):
         lr = self.lr_scheduler.get_lr()[0]
         self.alpha_optim.zero_grad()
@@ -160,26 +163,24 @@ class SearchCNNController(nn.Module):
         
 
     def forward(self, x):
-        """
-        if not self.pruned:
-            if self.use_gs:
-                weights_normal = [torch.distributions.RelaxedOneHotCategorical(
+        if self.sampling_mode == 'softmax':
+            weights_normal = [F.softmax(alpha/self.t, dim=-1)
+                                      for alpha in self.alpha_normal]
+            weights_reduce = [F.softmax(alpha/self.t, dim=-1)
+                                    for alpha in self.alpha_reduce]
+
+        elif self.sampling_mode == 'gumbel-softmax':
+            weights_normal = [torch.distributions.RelaxedOneHotCategorical(
                     self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
-                weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
+            weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
                     self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]
-            else:
-                weights_normal = [F.softmax(alpha/self.t, dim=-1)
-                                  for alpha in self.alpha_normal]
-                weights_reduce = [F.softmax(alpha/self.t, dim=-1)
-                                  for alpha in self.alpha_reduce]
+
+        elif self.sampling_mode == 'naive':
+            weights_normal = self.alpha_normal 
+            weights_reduce = self.alpha_reduce     
         else:
-            weights_normal = self.alpha_normal
-            weights_reduce = self.alpha_reduce
-        """
-        weights_normal = [F.softmax(alpha/self.t, dim=-1)
-                                  for alpha in self.alpha_normal]
-        weights_reduce = [F.softmax(alpha/self.t, dim=-1)
-                                  for alpha in self.alpha_reduce]
+            raise ValueError('Bad sampling mode')
+        
         return self.net(x, weights_normal, weights_reduce)
 
     def loss(self, X, y):
@@ -229,8 +230,9 @@ class SearchCNNController(nn.Module):
 
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step()
-        #TODO self.t = self.t + self.delta
-        pass 
+        if e > 0:
+            self.t = self.t + self.delta_t
+        
 
     def writer_callback(self, writer,  epoch, cur_step):
         hist_values = []
