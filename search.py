@@ -8,7 +8,7 @@ from tensorboardX import SummaryWriter
 import utils
 from importlib import import_module
 from utils import Config
-
+import tqdm 
 def main():    
     config = Config(sys.argv[1])
     device = torch.device("cuda")
@@ -120,7 +120,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
     
     model.train()
 
-    for step, ((trn_X, trn_y), (val_X, val_y)) in enumerate(zip(train_loader, valid_loader)):
+    for step, ((trn_X, trn_y), (val_X, val_y)) in tqdm.tqdm(enumerate(zip(train_loader, valid_loader))):
         trn_X, trn_y = trn_X.to(config.device, non_blocking=True), trn_y.to(
             config.device, non_blocking=True)
         val_X, val_y = val_X.to(config.device, non_blocking=True), val_y.to(
