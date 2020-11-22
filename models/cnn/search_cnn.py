@@ -96,7 +96,7 @@ class SearchCNNController(nn.Module):
         n_layers = int(subcfg['layers'])
         n_nodes = int(subcfg['n_nodes'])
         stem_multiplier = int(subcfg['stem_multiplier'])     
-        sampling_mode = subcfg['sampling_mode']
+        self.sampling_mode = subcfg['sampling_mode']
         self.n_nodes = n_nodes        
         self.device = kwargs['device']
         self.criterion = nn.CrossEntropyLoss().to(self.device)        
@@ -174,7 +174,7 @@ class SearchCNNController(nn.Module):
                     self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
             weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
                     self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]
-
+            
         elif self.sampling_mode == 'naive':
             weights_normal = self.alpha_normal 
             weights_reduce = self.alpha_reduce     
