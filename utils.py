@@ -2,12 +2,15 @@
 import os
 import logging
 import shutil
+import glob
+
 import torch
 import torchvision.datasets as dset
 import numpy as np
 import preproc
 import torch as t
 from configobj import ConfigObj
+
 
 
           
@@ -112,12 +115,19 @@ def accuracy(output, target, topk=(1,)):
 
     return res
 
+def find_checkpoint(ckpt_dir, seed):
+    files = sorted(glob.glob(ckpt_dir+'/'+'checkpoint_{}_*.ckp'.format(seed)), key = lambda x: int(x.split('_')[-1].split('.')[0]))
+    if len(files)>0:
+        return files[-1], int(files[-1].split('_')[-1].split('.')[0]) + 1
+    else:
+        return None, 0
+    
 
-def save_checkpoint(state, ckpt_dir, add_tag ='', is_best=False):
-    filename = os.path.join(ckpt_dir, 'checkpoint{}.pth.tar'.format(add_tag))
+def save_checkpoint(state, ckpt_dir, seed='', epoch='',  is_best=False):
+    filename = os.path.join(ckpt_dir, 'checkpoint_{}_{}.ckp'.format(seed, epoch))
     torch.save(state, filename)
     if is_best:
-        best_filename = os.path.join(ckpt_dir, 'best{}.pth.tar'.format(add_tag))
+        best_filename = os.path.join(ckpt_dir, 'best_{}.pth.tar'.format(seed))
         shutil.copyfile(filename, best_filename)
 
 

@@ -25,8 +25,6 @@ def main():
     logger.info("Logger is set - training start")
     torch.cuda.set_device(config.device)
 
-    # set seed
-    
 
     torch.backends.cudnn.benchmark = True
 
@@ -39,17 +37,15 @@ def main():
     model = None 
     for seed in config.seeds.split(';'):    
         seed = int(seed)
-        logger.info('using seed '+str(seed))
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        
+        # deleting model from previous seed
         if model is not None:
             del model 
             if 'cuda' in config.device:
-                torch.cuda.empty_cache() 
-
+                torch.cuda.empty_cache()       
         model = controller_cls(**config.__dict__)
         model = model.to(device)    
+
         # split data to train/validation
         n_train = len(train_data)
         split = int(n_train * float(config.validate_split))
@@ -78,10 +74,25 @@ def main():
         
 
         # training loop
-        best = 0    
+        best = 0 
+
+        # trying to find available models
+        checkpoint_path, start_epoch = utils.find_checkpoint(config.path, seed)
+        if checkpoint_path is not None:
+            logger.debug('found checkpoint: '+checkpoint_path)
+            model.load_state_dict(torch.load(checkpoint_path))
+
+
         
-        for epoch in range(int(config.epochs)):
-            
+
+        for epoch in range(start_epoch, int(config.epochs)):
+            # it's better to control seed if ti changes during every epoch                        
+            logger.info('epoch' +str(epoch))
+            logger.info('using seed '+str(seed+epoch))
+            np.random.seed(seed+epoch)
+            torch.manual_seed(seed+epoch)
+            torch.cuda.manual_seed_all(seed+epoch)
+
             model.new_epoch(epoch, writer, logger) 
             # training
             train_qual = train(train_loader, valid_loader, model, epoch, writer,  config, logger)        
@@ -105,7 +116,8 @@ def main():
                 is_best = True
             else:
                 is_best = False
-            utils.save_checkpoint(model, config.path, '_seed_'+str(seed), is_best)
+            
+            utils.save_checkpoint(model, config.path, seed, epoch, is_best=is_best)
             logger.info("Quality{}: {} \n\n".format(
                 '*' if is_best else '', cur_qual))
 

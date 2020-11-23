@@ -139,7 +139,7 @@ class SearchCNNController(nn.Module):
         self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
 
     def train_step(self, trn_X, trn_y, val_X, val_y):
-        lr = self.lr_scheduler.get_lr()[0]
+        lr = self.lr_scheduler.get_last_lr()[0]
         self.alpha_optim.zero_grad()
         if self.simple_alpha_update:
             arch_loss = self.architect.net.loss(val_X, val_y)
@@ -229,9 +229,8 @@ class SearchCNNController(nn.Module):
         plot(self.genotype().reduce, plot_path+'-reduce', caption+'-reduce')
 
     def new_epoch(self, e, w, l):
-        self.lr_scheduler.step()
-        if e > 0:
-            self.t = self.t + self.delta_t
+        self.lr_scheduler.step(epoch=e)    
+        self.t = self.t + self.delta_t*e
         
 
     def writer_callback(self, writer,  epoch, cur_step):
