@@ -134,11 +134,15 @@ def save_checkpoint(state, ckpt_dir, seed='', epoch='',  is_best=False):
 class Config:
     def __init__(self, config_path):            
         self.name = 'experiment'        
-        self.workers = 4         
-        self.path = os.path.join('searchs', self.name)
-        self.plot_path = self.path
+        self.workers = 4                         
         self.device = 'cuda:0'
         self.data_path = './data'        
         self.cfg = ConfigObj(config_path)        
         for k in self.cfg:
             self.__dict__[k] = self.cfg[k]
+        if 'path' not in self.__dict__:            
+            self.path = os.path.join('searchs', self.name)
+        self.plot_path = self.path
+        
+            
+        

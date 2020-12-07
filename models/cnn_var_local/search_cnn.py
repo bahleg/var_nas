@@ -24,7 +24,7 @@ def broadcast_list(l, device_ids):
 class LVarSearchCNN(nn.Module):
     """ Search CNN model """
 
-    def __init__(self,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3, t=1.0, delta=-0.016):
+    def __init__(self,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3, t=1.0, stochastic_w=True, stochastic_gamma=True):
         """
         Args:
             C_in: # of input channels
@@ -69,9 +69,8 @@ class LVarSearchCNN(nn.Module):
 
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.linear = LocalVarLinear(C_p, n_classes)
-        
+
         self.t = float(t)
-        self.delta = float(delta)
 
         self.q_gamma_normal = nn.ParameterList()
         self.q_gamma_reduce = nn.ParameterList()
@@ -82,42 +81,24 @@ class LVarSearchCNN(nn.Module):
                 nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
             self.q_gamma_reduce.append(
                 nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
-        
-        self.stochastic_gamma = True
-        self.stochastic_w = True
-        self.pruned = False
+        self.stochastic_w = stochastic_w
+        self.stochastic_gamma = stochastic_gamma
 
-    def disable_stochastic_w(self):
-        logging.debug('disabling stochastic w')        
-        self.stochastic_w = False
-        all_ = [self]
-        i = 0 
-        while i<len(all_):
-                current = all_[i]
-                i+=1
-                try:
-                    for c in current.children():
-                        all_+=[c]
-                except:
-                    pass
-        for c in all_:
-                if 'stochastic' in c.__dict__:
-                    c.stochastic = False 
+        if stochastic_w:
+            self.disable_w()
 
     def forward(self, x):
         s0 = s1 = self.stem(x)
-        t = torch.ones(1).to(x.device)*self.t            
-            
-        for cell in self.cells:            
+        t = torch.ones(1).to(x.device)*self.t
+
+        for cell in self.cells:
             gammas = self.q_gamma_reduce if cell.reduction else self.q_gamma_normal
-            if  self.stochastic_gamma:
+            if self.stochastic_gamma:
                 weights = [torch.distributions.RelaxedOneHotCategorical(
                     t, logits=gamma).rsample([x.shape[0]]) for gamma in gammas]
             else:
-                if self.t!=0:
-                    weights = [torch.nn.functional.softmax(gamma/t) for gamma in gammas]
-                else:
-                    weights = gammas
+                weights = [torch.nn.functional.softmax(
+                    gamma/t) for gamma in gammas]
 
             s0, s1 = s1, cell(s0, s1, weights)
 
@@ -126,112 +107,76 @@ class LVarSearchCNN(nn.Module):
         logits = self.linear(out)
         return logits
 
-    def prune(self, w, k=None):
-        self.stochastic_gamma = False
-        self.t = 0
-        for edges in self.q_gamma_normal:
-            edge_max, primitive_indices = torch.topk(                
-                edges[:, :], 1) 
-            edges.data *= 0
-            if k:
-                k_ = k
-            else:
-                k_ = edge_max.shape[0]
+    def disable_w(self):
+        all_ = [self]
+        i = 0
+        while i < len(all_):
+            current = all_[i]
+            i += 1
+            try:
+                for c in current.children():
+                    all_ += [c]
+            except:
+                pass
+        for c in all_:
+            if 'stochastic' in c.__dict__:
+                c.stochastic = False
 
-            topk_edge_values, topk_edge_indices = torch.topk(
-                edge_max.view(-1), k_)
-            node_gene = []
 
-            for edge_idx in topk_edge_indices:
-                edges.data[edge_idx, primitive_indices[edge_idx]] += 1
-        for edges in self.q_gamma_reduce:
-            edge_max, primitive_indices = torch.topk(
-                edges[:, :], 1)  
-            edges.data *= 0
-            if k:
-                k_ = k
-            else:
-                k_ = edge_max.shape[0]
-            topk_edge_values, topk_edge_indices = torch.topk(
-                edge_max.view(-1), k_)
-            node_gene = []
-            for edge_idx in topk_edge_indices:
-                edges.data[edge_idx, primitive_indices[edge_idx]] += 1
-        if w:
-            all_ = [self]
-            i = 0 
-            while i<len(all_):
-                current = all_[i]
-                i+=1
-                try:
-                    for c in current.children():
-                        all_+=[c]
-                except:
-                    pass
-            for c in all_:
-                if 'stochastic' in c.__dict__:
-                    c.stochastic = False                   
-
-#https://github.com/pytorch/pytorch/blob/master/torch/distributions/kl.py#L405
+# https://github.com/pytorch/pytorch/blob/master/torch/distributions/kl.py#L405
 def kl_normal_normal(pl, ql, ps, qs):
-    
+
     #ps = ps.view(-1)
     #qs = qs.view(-1)
     #pl = pl.view(-1)
     #ql = ql.view(-1)
-    
+
     var_ratio = (ps / qs).pow(2)
-    
+
     t1 = ((pl - ql) / qs).pow(2)
-    
-    result =  0.5 * (var_ratio + t1 - 1 - var_ratio.log()).sum()
+
+    result = 0.5 * (var_ratio + t1 - 1 - var_ratio.log()).sum()
     return result
 
 
-class LVarSearchCNNController(nn.Module):
+class SearchCNNController(nn.Module):
     """ SearchCNN controller supporting multi-gpu """
 
-    def __init__(self, device, **kwargs):
+    def __init__(self,  **kwargs):
         super().__init__()
-        C_in = int(kwargs['input_channels'])
-        C = int(kwargs['init_channels'])
-        n_classes = int(kwargs['n_classes'])
-        n_layers = int(kwargs['layers'])
-        n_nodes = int(kwargs['n_nodes'])
-        stem_multiplier = int(kwargs['stem_multiplier'])
-        device_ids = kwargs.get('device_ids', None)
-        self.dataset_size = int(kwargs['dataset size'])
-        self.n_nodes = n_nodes        
-        if device_ids is None:
-            device_ids = list(range(torch.cuda.device_count()))
-        self.device_ids = device_ids
-        self.criterion = nn.CrossEntropyLoss().to(device)
-        self.device = device
+        subcfg = kwargs['var_darts']
+        C_in = int(subcfg['input_channels'])
+        C = int(subcfg['init_channels'])
+        n_classes = int(subcfg['n_classes'])
+        n_layers = int(subcfg['layers'])
+        n_nodes = int(subcfg['n_nodes'])
+        stem_multiplier = int(subcfg['stem_multiplier'])
+        self.device = kwargs['device']
+        self.dataset_size = int(subcfg['dataset size'])
+        self.n_nodes = n_nodes
+        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.stochastic_w = int(subcfg['stochastic w']) != 0
+        self.stochastic_gamma = True
 
         # initialize architect parameters: alphas
         n_ops = len(gt.PRIMITIVES)
 
-        #self.log_t_h_mean = nn.Parameter(torch.ones(
-        #    1) * (float(kwargs['initial temp log'])))
-        #self.log_t_h_log_sigma = nn.Parameter(torch.ones(
-        #    1) * float(kwargs['initial temp log sigma']))
+        self.delta = float(subcfg['delta'])
 
-        self.delta = float(kwargs['delta'])
-
-        self.alpha_normal = nn.ParameterList()
-        self.alpha_reduce = nn.ParameterList()
-
-        self.alpha_w_h = {}
-        self.sigmas_w = {}
-        self.alpha_h = nn.ParameterList()
-
-        self.sample_num = int(kwargs['sample num'])
+        self.sample_num = int(subcfg['sample num'])
 
         self.net = LVarSearchCNN(C_in, C,  n_classes,
-                                 n_layers, n_nodes, stem_multiplier, kwargs['initial temp'], kwargs['delta'])
+                                 n_layers, n_nodes, stem_multiplier, t=float(subcfg['initial temp']), stochastic_gamma=self.stochastic_gamma,
+                                 stochastic_w=self.stochastic_w)
+
+        self.alpha_h = nn.ParameterList()
+        self.alpha_normal = nn.ParameterList()
+        self.alpha_reduce = nn.ParameterList()
+        self.alpha_w_h = {}
+        self.sigmas_w = {}
 
         for w in self.net.parameters():
-            if 'sigma' in w.__dict__:
+            if 'sigma' in w.__dict__:  # var!
                 self.alpha_h.append(nn.Parameter(torch.zeros(w.shape)))
                 self.alpha_w_h[w] = self.alpha_h[-1]
                 self.sigmas_w[w] = w.sigma
@@ -248,69 +193,65 @@ class LVarSearchCNNController(nn.Module):
             if 'alpha' in n:
                 self._alphas.append((n, p))
 
-        
+        if not self.stochastic_w:
+            self.net.disable_w()
 
-        self.net.stochastic_gamma =  int(kwargs['stochastic_gamma'])!=0
-        self.net.stochastic_w =  int(kwargs['stochastic_w'])!=0
-        if not self.net.stochastic_w:
-            self.net.disable_stochastic_w()        
+        self.all_params = list(self.net.parameters()) + list(self.alpha_h)
 
-    
+        # weights optimizer
+        self.w_optim = torch.optim.SGD(self.all_params, float(subcfg['optim']['w_lr']), momentum=float(subcfg['optim']['w_momentum']),
+                                       weight_decay=float(subcfg['optim']['w_weight_decay']))
+
+        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.w_optim, int(kwargs['epochs']), eta_min=float(subcfg['optim']['w_lr_min']))
+        self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
+
     def writer_callback(self, writer, cur_step):
-        hist_values = []
-        for val in self.net.q_gamma_normal:
-            hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
-        hist_values = np.array(hist_values).flatten().tolist()
-        writer.add_histogram('train/gamma_normal', hist_values, cur_step)# %%
-        
-        hist_values = []
-        for val in self.net.q_gamma_reduce:
-            hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
-        hist_values = np.array(hist_values).flatten().tolist()
-        writer.add_histogram('train/gamma_reduce', hist_values, cur_step)# %%        
-        
-        
-        #hist_values = self.net.log_q_t_mean.cpu().detach().numpy() + np.random.randn(10000)*torch.exp(self.net.log_q_t_log_sigma).detach().cpu().numpy()
-        #writer.add_histogram('train/temp', np.exp(hist_values), cur_step, bins='auto') # %%        
-        #writer.add_histogram('train/log_temp', hist_values, cur_step, bins='auto') 
-        
-        #writer.add_scalar('train/temp_min', torch.exp(self.net.log_q_t_mean-2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
-        #writer.add_scalar('train/temp_max', torch.exp(self.net.log_q_t_mean+2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
-        
+        pass
 
+    def train_step(self, trn_X, trn_y, val_X, val_y):
+        lr = self.lr_scheduler.get_last_lr()[0]
+        # phase 1. child network step (w)
+        self.w_optim.zero_grad()
+        loss = self.loss(trn_X, trn_y)
+        loss.backward()
+        # gradient clipping
+        nn.utils.clip_grad_norm_(self.all_params, self.w_grad_clip)
+        self.w_optim.step()
+        return loss
 
-    def new_epoch(self, e, writer):
-        self.net.t += self.net.delta
-        
+    def new_epoch(self, e, writer, l):
+        self.net.t += self.delta
 
     def forward(self, x):
         return self.net(x)
 
     def loss(self, X, y):
-        logits = self.forward(X)        
-        kld = self.kld()    
+        logits = self.forward(X)
+        kld = self.kld()
         return kld / self.dataset_size + self.criterion(logits, y)
-        
+
     def kld(self):
         k = 0
-        if self.net.stochastic_w:
-            for w, h in self.alpha_w_h.items():                        
-                k+= kl_normal_normal( w, torch.zeros_like(w), torch.exp(self.sigmas_w[w]), torch.exp(h))    
-        
-        if self.net.stochastic_gamma:
-            t = torch.ones(1).to(self.device)*self.net.t            
+
+        if self.stochastic_w:
+            for w, h in self.alpha_w_h.items():
+                k += kl_normal_normal(w, torch.zeros_like(w),
+                                      torch.exp(self.sigmas_w[w]), torch.exp(h))
+
+        if self.stochastic_gamma:
+            t = torch.ones(1).to(self.device)*self.net.t
             for a, ga in zip(self.alpha_normal, self.net.q_gamma_normal):
                 g = torch.distributions.RelaxedOneHotCategorical(
-                    t, logits=ga)                                 
+                    t, logits=ga)
                 sample = (g.rsample([self.sample_num])+0.0001)
                 k += (g.log_prob(sample)).sum() / self.sample_num
 
             for a, ga in zip(self.alpha_normal, self.net.q_gamma_reduce):
                 g = torch.distributions.RelaxedOneHotCategorical(
-                    t, logits=ga)                                 
+                    t, logits=ga)
                 sample = (g.rsample([self.sample_num])+0.0001)
                 k += (g.log_prob(sample)).sum() / self.sample_num
-
 
         return k
 
@@ -320,30 +261,6 @@ class LVarSearchCNNController(nn.Module):
         for handler in logger.handlers:
             org_formatters.append(handler.formatter)
             handler.setFormatter(logging.Formatter("%(message)s"))
-    
-        logger.info("####### ALPHA #######")
-        logger.info("# Alpha - normal")
-        for alpha in self.alpha_normal:
-            logger.info(F.softmax(alpha, dim=-1))
-
-        logger.info("\n# Alpha - reduce")
-        for alpha in self.alpha_reduce:
-            logger.info(F.softmax(alpha, dim=-1))
-        logger.info("#####################")
-
-        logger.info("####### GAMMA #######")
-        logger.info("# Gamma - normal")
-
-        for alpha in self.net.q_gamma_normal:
-            logger.info(F.softmax(alpha, dim=-1))
-
-        logger.info("\n# Gamma - reduce")
-        for alpha in self.net.q_gamma_reduce:
-            logger.info(F.softmax(alpha, dim=-1))
-        logger.info("#####################")
-
-            #logger.info('Temp: {}...{}'.format(str(torch.exp(self.net.log_q_t_mean-2*torch.exp(self.net.log_q_t_log_sigma))),
-            #                                   str(torch.exp(self.net.log_q_t_mean+2*torch.exp(self.net.log_q_t_log_sigma)))))
 
         if True:
             logger.info("####### GAMMA #######")
@@ -374,12 +291,6 @@ class LVarSearchCNNController(nn.Module):
         self.stochastic = False
         self.net.stochastic = False
         self.net.prune()
-
-    def weights(self):
-        return self.net.parameters()
-
-    def named_weights(self):
-        return self.net.named_parameters()
 
     def alphas(self):
         for n, p in self._alphas:

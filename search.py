@@ -11,7 +11,8 @@ from utils import Config
 import tqdm 
 def main():    
     config = Config(sys.argv[1])
-    device = torch.device("cuda")
+    device = config.device
+    
 
     # tensorboard
     tb_path = os.path.join(config.path, "tb")
@@ -42,7 +43,7 @@ def main():
         if model is not None:
             del model 
             if 'cuda' in config.device:
-                torch.cuda.empty_cache()       
+                torch.cuda.empty_cache()           
         model = controller_cls(**config.__dict__)
         model = model.to(device)    
 

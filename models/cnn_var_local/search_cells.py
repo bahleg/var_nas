@@ -1,14 +1,13 @@
 """ CNN cell for architecture search """
 import torch
 import torch.nn as nn
-import models.cnn_var_local.ops as ops
+import  models.cnn.ops as ops
 
 
 class SearchCell(nn.Module):
     """ Cell for search
     Each edge is mixed and continuous relaxed.
     """
-
     def __init__(self, n_nodes, C_pp, C_p, C, reduction_p, reduction):
         """
         Args:
@@ -35,7 +34,7 @@ class SearchCell(nn.Module):
         self.dag = nn.ModuleList()
         for i in range(self.n_nodes):
             self.dag.append(nn.ModuleList())
-            for j in range(2+i):  # include 2 input nodes
+            for j in range(2+i): # include 2 input nodes
                 # reduction should be used only for input node
                 stride = 2 if reduction and j < 2 else 1
                 op = ops.MixedOp(C, stride)
@@ -47,12 +46,9 @@ class SearchCell(nn.Module):
 
         states = [s0, s1]
         for edges, w_list in zip(self.dag, w_dag):
-            
             if len(w_list.shape) == 3:
-                w_list = w_list.transpose(0, 1)
-            #    # if we sample weights per-element. It will be processed futrher. See mixop
-            s_cur = sum(edges[i](s, w)
-                        for i, (s, w) in enumerate(zip(states, w_list)))
+                w_list = w_list.permute(1,2,0)
+            s_cur = sum(edges[i](s, w) for i, (s, w) in enumerate(zip(states, w_list)))
             states.append(s_cur)
 
         s_out = torch.cat(states[2:], dim=1)
