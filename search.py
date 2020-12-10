@@ -81,7 +81,7 @@ def main():
         checkpoint_path, start_epoch = utils.find_checkpoint(config.path, seed)
         if checkpoint_path is not None:
             logger.debug('found checkpoint: '+checkpoint_path)
-            model.load_state_dict(torch.load(checkpoint_path))
+            model.load(torch.load(checkpoint_path))
 
 
         
@@ -118,7 +118,7 @@ def main():
             else:
                 is_best = False
             
-            utils.save_checkpoint(model, config.path, seed, epoch, is_best=is_best)
+            utils.save_checkpoint(model.state_dict(), config.path, seed, epoch, is_best=is_best)
             logger.info("Quality{}: {} \n\n".format(
                 '*' if is_best else '', cur_qual))
 
