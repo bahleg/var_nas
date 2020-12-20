@@ -259,12 +259,8 @@ class MixedOp(nn.Module):
             x: input
             weights: weight for each operation
         """
-        res = [op(x) for op in self._ops]      
         if len(weights[0].shape)==1: #non-scalar
-            res =  sum(w * r for w, r in zip(weights.reshape(-1, 1), res))    
+            res =  sum(w.view(-1, 1, 1, 1) * op(x) for w, op in zip(weights, self._ops))
         else:
-            res =  sum(w * r for w, r in zip(weights, res))
-        if sum(weights)<0:            
-            return torch.randn(res.size()).to(res.device) * sum(weights)
-        else:
-            return res 
+            res =  sum(w * op(x) for w, op in zip(weights, self._ops))
+        return res 
