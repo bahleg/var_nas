@@ -206,7 +206,7 @@ class LVarSearchCNNController(nn.Module):
             self.w_optim, int(kwargs['epochs']), eta_min=float(subcfg['optim']['w_lr_min']))
         self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
 
-    def writer_callback(self, writer, cur_step):
+    def writer_callback(self, writer, epoch, cur_step):
         pass
 
     def train_step(self, trn_X, trn_y, val_X, val_y):
