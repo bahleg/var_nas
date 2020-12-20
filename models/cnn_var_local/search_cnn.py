@@ -139,7 +139,7 @@ def kl_normal_normal(pl, ql, ps, qs):
     return result
 
 
-class SearchCNNController(nn.Module):
+class LVarSearchCNNController(nn.Module):
     """ SearchCNN controller supporting multi-gpu """
 
     def __init__(self,  **kwargs):
