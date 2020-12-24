@@ -81,7 +81,7 @@ def main():
         checkpoint_path, start_epoch = utils.find_checkpoint(config.path, seed)
         if checkpoint_path is not None:
             logger.debug('found checkpoint: '+checkpoint_path)
-            model.load(torch.load(checkpoint_path))
+            model.load_state_dict(torch.load(checkpoint_path))
 
 
         
