@@ -97,8 +97,7 @@ class LVarSearchCNN(nn.Module):
                 weights = [torch.distributions.RelaxedOneHotCategorical(
                     t, logits=gamma).rsample([x.shape[0]]) for gamma in gammas]
             else:
-                weights = [torch.nn.functional.softmax(
-                    gamma/t) for gamma in gammas]
+                weights = [gamma for gamma in gammas]
 
             s0, s1 = s1, cell(s0, s1, weights)
 
@@ -156,7 +155,7 @@ class LVarSearchCNNController(nn.Module):
         self.n_nodes = n_nodes
         self.criterion = nn.CrossEntropyLoss().to(self.device)
         self.stochastic_w = int(subcfg['stochastic w']) != 0
-        self.stochastic_gamma = True
+        self.stochastic_gamma = int(subcfg['stochastic gamma']) != 0
 
         # initialize architect parameters: alphas
         n_ops = len(gt.PRIMITIVES)
