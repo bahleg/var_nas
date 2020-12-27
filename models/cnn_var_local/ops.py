@@ -38,8 +38,12 @@ class LocalVarConv2d(nn.Conv2d):
             self.log_sigma_b = nn.Parameter(t.ones(self.bias.shape).to(self.bias.device) * -3.0)    
             self.bias.sigma = self.log_sigma_b
     def forward(self, x):   
-        if not self.stochastic: 
-            return self._conv_forward(x, self.weight)
+        if not self.stochastic:
+            try: 
+              return self._conv_forward(x, self.weight)
+            except:
+              return self._conv_forward(x, self.weight, self.bias)
+
         else:
             eps = 1e-8
             W = self.weight
