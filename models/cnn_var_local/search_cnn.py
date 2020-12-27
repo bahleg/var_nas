@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from models.cnn_var_local.search_cells import SearchCell
 from models.cnn_var_local.ops import LocalVarConv2d, LocalVarLinear
-import genotypes as gt
 from torch.nn.parallel._functions import Broadcast
 
 from visualize import plot
@@ -24,7 +23,7 @@ def broadcast_list(l, device_ids):
 class LVarSearchCNN(nn.Module):
     """ Search CNN model """
 
-    def __init__(self,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3, t=1.0, stochastic_w=True, stochastic_gamma=True):
+    def __init__(self,  primitives,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3, t=1.0, stochastic_w=True, stochastic_gamma=True):
         """
         Args:
             C_in: # of input channels
@@ -61,7 +60,7 @@ class LVarSearchCNN(nn.Module):
                 reduction = False
 
             cell = SearchCell(n_nodes, C_pp, C_p, C_cur,
-                              reduction_p, reduction)
+                              reduction_p, reduction, primitives)
             reduction_p = reduction
             self.cells.append(cell)
             C_cur_out = C_cur * n_nodes
@@ -74,7 +73,7 @@ class LVarSearchCNN(nn.Module):
 
         self.q_gamma_normal = nn.ParameterList()
         self.q_gamma_reduce = nn.ParameterList()
-        n_ops = len(gt.PRIMITIVES)
+        n_ops = len(primitives)
 
         for i in range(n_nodes):
             self.q_gamma_normal.append(
@@ -158,13 +157,35 @@ class LVarSearchCNNController(nn.Module):
         self.stochastic_gamma = int(subcfg['stochastic gamma']) != 0
 
         # initialize architect parameters: alphas
-        n_ops = len(gt.PRIMITIVES)
-
+   
         self.delta = float(subcfg['delta'])
 
         self.sample_num = int(subcfg['sample num'])
-
-        self.net = LVarSearchCNN(C_in, C,  n_classes,
+        if subcfg['primitives'] == 'DARTS':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect', # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+                'none'
+            ] 
+        elif subcfg['primitives'] == 'DARTS non-zero':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect', # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+            ]            
+        else:
+            raise ValueError('Incorrect value for primitives')
+        n_ops = len(primitives)
+        self.net = LVarSearchCNN(primitives, C_in, C,  n_classes,
                                  n_layers, n_nodes, stem_multiplier, t=float(subcfg['initial temp']), stochastic_gamma=self.stochastic_gamma,
                                  stochastic_w=self.stochastic_w)
 
@@ -278,6 +299,7 @@ class LVarSearchCNNController(nn.Module):
             handler.setFormatter(formatter)
 
     def genotype(self):
+        raise NotImplementedError()
         gene_normal = gt.parse(self.alpha_normal, k=2)
         gene_reduce = gt.parse(self.alpha_reduce, k=2)
         concat = range(2, 2+self.n_nodes)  # concat all intermediate nodes
@@ -285,12 +307,7 @@ class LVarSearchCNNController(nn.Module):
         return gt.Genotype(normal=gene_normal, normal_concat=concat,
                            reduce=gene_reduce, reduce_concat=concat)
 
-    def prune(self):
-        raise NotImplementedError()
-        self.stochastic = False
-        self.net.stochastic = False
-        self.net.prune()
-
+  
     def alphas(self):
         for n, p in self._alphas:
             yield p

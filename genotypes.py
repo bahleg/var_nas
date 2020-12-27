@@ -11,7 +11,7 @@ from models.cnn import ops
 
 Genotype = namedtuple('Genotype', 'normal normal_concat reduce reduce_concat')
 
-PRIMITIVES = [
+PRIMITIVES =  [
     'max_pool_3x3',
     'avg_pool_3x3',
     'skip_connect', # identity
@@ -20,7 +20,8 @@ PRIMITIVES = [
     'dil_conv_3x3',
     'dil_conv_5x5',
     'none'
-]
+] 
+
 
 
 
@@ -83,7 +84,7 @@ def parse(alpha, k):
     ]
     each node has two edges (k=2) in CNN.
     """
-
+    raise NotImplementedError()
     gene = []
     assert PRIMITIVES[-1] == 'none' # assume last PRIMITIVE is 'none'
 

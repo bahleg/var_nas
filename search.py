@@ -104,7 +104,7 @@ def main():
                                 cur_step, device, config, logger, writer)
             plot_path = os.path.join(config.plot_path, "EP{:02d}_Seed{}".format(epoch+1, seed))                            
             caption = "Epoch {}".format(epoch+1)
-            model.plot_genotype(plot_path, caption)
+            #model.plot_genotype(plot_path, caption)
             
             if int(config.use_train_quality) != 0:
                 cur_qual = train_qual

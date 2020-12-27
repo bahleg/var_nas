@@ -25,7 +25,7 @@ def broadcast_list(l, device_ids):
 class SearchCNN(nn.Module):
     """ Search CNN model """
 
-    def __init__(self, C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3):
+    def __init__(self, primitives,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3):
         """
         Args:
             C_in: # of input channels
@@ -61,8 +61,8 @@ class SearchCNN(nn.Module):
             else:
                 reduction = False
 
-            cell = SearchCell(n_nodes, C_pp, C_p, C_cur,
-                              reduction_p, reduction)
+            cell = SearchCell(n_nodes,   C_pp, C_p, C_cur,
+                              reduction_p, reduction, primitives)
             reduction_p = reduction
             self.cells.append(cell)
             C_cur_out = C_cur * n_nodes
@@ -100,10 +100,33 @@ class SearchCNNController(nn.Module):
         self.n_nodes = n_nodes        
         self.device = kwargs['device']
         self.criterion = nn.CrossEntropyLoss().to(self.device)        
-        self.t = float(subcfg['init temp'])
-        self.delta_t = float(subcfg['delta temp'])
+        self.t = float(subcfg['initial temp'])
+        self.delta_t = float(subcfg['delta'])
         # initialize architect parameters: alphas
-        n_ops = len(ops.PRIMITIVES)
+        if subcfg['primitives'] == 'DARTS':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect', # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+                'none'
+            ] 
+        elif subcfg['primitives'] == 'DARTS non-zero':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect', # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+            ]            
+        else:
+            raise ValueError('Incorrect value for primitives')
+        n_ops = len(primitives)
 
         self.alpha_normal = nn.ParameterList()
         self.alpha_reduce = nn.ParameterList()
@@ -121,8 +144,8 @@ class SearchCNNController(nn.Module):
             if 'alpha' in n:
                 self._alphas.append((n, p))
 
-        self.net = SearchCNN(C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier)
+        self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
+                             n_nodes, stem_multiplier )
         
         # weights optimizer
         self.w_optim = torch.optim.SGD(self.weights(), float(subcfg['optim']['w_lr']), momentum=float(subcfg['optim']['w_momentum']),
@@ -217,6 +240,7 @@ class SearchCNNController(nn.Module):
             handler.setFormatter(formatter)
 
     def genotype(self):
+        raise NotImplementedError()
         gene_normal = gt.parse(self.alpha_normal, k=2)
         gene_reduce = gt.parse(self.alpha_reduce, k=2)
         concat = range(2, 2+self.n_nodes)  # concat all intermediate nodes

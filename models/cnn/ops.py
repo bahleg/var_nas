@@ -18,16 +18,6 @@ OPS = {
     'conv_7x1_1x7': lambda C, stride, affine: FacConv(C, C, 7, stride, 3, affine=affine)
 }
 
-PRIMITIVES = [
-    'max_pool_3x3',
-    'avg_pool_3x3',
-    'skip_connect', # identity
-    'sep_conv_3x3',
-    'sep_conv_5x5',
-    'dil_conv_3x3',
-    'dil_conv_5x5',
-    'none'
-]
 
 
 
@@ -195,10 +185,10 @@ class FactorizedReduce(nn.Module):
 
 class MixedOp(nn.Module):
     """ Mixed operation """
-    def __init__(self, C, stride):
+    def __init__(self, C, stride, primitives):
         super().__init__()
         self._ops = nn.ModuleList()
-        for primitive in PRIMITIVES:
+        for primitive in primitives:
             op = OPS[primitive](C, stride, affine=False)
             self._ops.append(op)
 
