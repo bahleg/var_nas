@@ -242,7 +242,7 @@ class LVarSearchCNNController(nn.Module):
 
     def new_epoch(self, e, writer, l):
         self.lr_scheduler.step(epoch=e)   
-        self.t = self.t + self.delta_t*e
+        self.net.t = self.net.t + self.delta*e
 
     def forward(self, x):
         return self.net(x)
