@@ -241,7 +241,8 @@ class LVarSearchCNNController(nn.Module):
         return loss
 
     def new_epoch(self, e, writer, l):
-        self.net.t += self.delta
+        self.lr_scheduler.step(epoch=e)   
+        self.t = self.t + self.delta_t*e
 
     def forward(self, x):
         return self.net(x)
