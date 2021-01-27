@@ -130,13 +130,22 @@ class SearchCNNController(nn.Module):
 
         self.alpha_normal = nn.ParameterList()
         self.alpha_reduce = nn.ParameterList()
+        
+        if self.sampling_mode == 'igr':
+            self.alpha_cov_normal = nn.ParameterList()
+            self.alpha_cov_reduce = nn.ParameterList()
 
         for i in range(n_nodes):
             if n_layers>=3:
-                self.alpha_normal.append(
+                self.alpha_normal.append(                    
                     nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
+                if self.sampling_mode == 'igr':                
+                    self.alpha_cov_normal.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)))
             self.alpha_reduce.append(
                 nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
+            if self.sampling_mode == 'igr':                
+                self.alpha_cov_reduce.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)))
+
 
         # setup alphas list
         self._alphas = []
@@ -166,12 +175,13 @@ class SearchCNNController(nn.Module):
         self.alpha_optim.zero_grad()
         if self.simple_alpha_update:
             arch_loss = self.architect.net.loss(val_X, val_y)
-            arch_loss.backward()
+            arch_loss.backward()            
         else:
             self.architect.unrolled_backward(
                 trn_X, trn_y, val_X, val_y, lr, self.w_optim)
-
+        
         self.alpha_optim.step()
+      
 
         # phase 1. child network step (w)
         self.w_optim.zero_grad()
@@ -180,7 +190,7 @@ class SearchCNNController(nn.Module):
         # gradient clipping
         nn.utils.clip_grad_norm_(self.weights(), self.w_grad_clip)
 
-        self.w_optim.step()
+        self.w_optim.step()        
         return loss 
 
         
@@ -196,11 +206,36 @@ class SearchCNNController(nn.Module):
             weights_normal = [torch.distributions.RelaxedOneHotCategorical(
                     self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
             weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
-                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]
-            
+                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]        
         elif self.sampling_mode == 'naive':
             weights_normal = self.alpha_normal 
             weights_reduce = self.alpha_reduce     
+        elif self.sampling_mode == 'igr':
+
+            weights_normal = []
+            weights_reduce = []
+
+            for alpha, cov in zip(self.alpha_normal, self.alpha_cov_normal):  
+                subsample = []             
+                for subalpha, subcov in zip(alpha, cov):                    
+                    subsample.append([])
+                    cov_matrix = torch.mm(subcov, subcov.t())
+                    distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
+                    sample = distr.rsample([x.shape[0]])
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
+                weights_normal.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                   
+
+            for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):  
+                subsample = []             
+
+                for subalpha, subcov in zip(alpha, cov):                    
+                    subsample.append([])
+                    cov_matrix = torch.mm(subcov, subcov.t())
+                    distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
+                    sample = distr.rsample([x.shape[0]])
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
+                weights_reduce.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                    
+                                
         else:
             raise ValueError('Bad sampling mode')
         
