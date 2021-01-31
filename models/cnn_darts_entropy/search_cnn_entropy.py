@@ -31,19 +31,57 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
         if self.log_t is not None:
             yield self.log_t
     
-
     def calc_entropy(self):
+        if self.sampling_mode == 'gumbel-softmax':
+            return self.calc_entropy_gs()
+        elif self.sampling_mode == 'igr':
+            return self.calc_entropy_igr()
+        else:
+            raise ValueError('Bad sampling mode')
+            
+
+    def calc_entropy_gs(self):
         entropy = 0
         for alpha in list(self.alpha_reduce) + list(self.alpha_normal):
             for subalpha in alpha:                
-                if self.sampling_mode == 'gumbel-softmax':
                     distr = torch.distributions.RelaxedOneHotCategorical(MIN_ALPHA+torch.exp(self.log_t), logits=subalpha)
+                    subentropy = 0
+                    for _ in range(self.e_sample_num):
+                        subentropy -= distr.log_prob(distr.rsample())
+                    subentropy /= self.e_sample_num
+                    entropy += subentropy
+                
+        return entropy
+
+    #https://arxiv.org/pdf/1912.09588.pdf
+    
+    def log_det_jac(self, logits, t):
+        k = len(logits)    
+        exp_logit = torch.exp(logits/t)
+        eps = 0.01
+        part1 = -2*(k-1) * torch.log((exp_logit.sum()))
+        
+        part2 = torch.log(abs(1-t*(exp_logit/(eps+logits)).sum()))
+        
+        part3 = -(k-1) * torch.log(t)
+        
+        part4 = (torch.log(abs(logits))+abs(logits/t)).sum() 
+        
+        return part1 + part2 + part3 +part4
+
+    def calc_entropy_igr(self):
+        entropy = 0
+        for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):
+            for subalpha, subcov in zip(alpha, cov):
+                distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
                 subentropy = 0
                 for _ in range(self.e_sample_num):
-                    subentropy -= distr.log_prob(distr.rsample())
+                    sample = distr.sample()                
+                    subentropy=subentropy -distr.log_prob(sample) +self.log_det_jac(sample, MIN_ALPHA+torch.exp(self.log_t))
                 subentropy /= self.e_sample_num
                 entropy += subentropy
-                
         return entropy
 
     def forward(self, x):
@@ -51,12 +89,44 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
             weights_normal = [torch.distributions.RelaxedOneHotCategorical(
                     MIN_ALPHA+torch.exp(self.log_t), logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
             weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
-                    MIN_ALPHA+torch.exp(self.log_t), logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]                    
+                    MIN_ALPHA+torch.exp(self.log_t), logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]   
+        elif self.sampling_mode == 'igr':
+
+            weights_normal = []
+            weights_reduce = []
+
+            for alpha, cov in zip(self.alpha_normal, self.alpha_cov_normal):  
+                subsample = []             
+                for subalpha, subcov in zip(alpha, cov):                    
+                    subsample.append([])
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
+                    sample = distr.rsample([x.shape[0]])
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
+                weights_normal.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                   
+
+            for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):  
+                subsample = []             
+
+                for subalpha, subcov in zip(alpha, cov):                    
+                    subsample.append([])
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
+                    sample = distr.rsample([x.shape[0]])
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
+                weights_reduce.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                    
+                                
+        else:
+            raise ValueError('Bad sampling mode')
+                             
         return self.net(x, weights_normal, weights_reduce)
 
 
+
     def loss(self, X, y):
-        logits = self.forward(X)             
+        logits = self.forward(X)                     
         return   self.criterion(logits, y) + self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2 
 
 

@@ -140,11 +140,11 @@ class SearchCNNController(nn.Module):
                 self.alpha_normal.append(                    
                     nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
                 if self.sampling_mode == 'igr':                
-                    self.alpha_cov_normal.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)))
+                    self.alpha_cov_normal.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)*0.1))
             self.alpha_reduce.append(
                 nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
             if self.sampling_mode == 'igr':                
-                self.alpha_cov_reduce.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)))
+                self.alpha_cov_reduce.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)*0.1))
 
 
         # setup alphas list
@@ -218,11 +218,9 @@ class SearchCNNController(nn.Module):
             for alpha, cov in zip(self.alpha_normal, self.alpha_cov_normal):  
                 subsample = []             
                 for subalpha, subcov in zip(alpha, cov):                    
-                    subsample.append([])
-                    subcov = torch.tril(subcov)
-                    subcov.fill_diagonal_(1.0)
-                    cov_matrix = torch.mm(subcov, subcov.t())
-                    distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
                     sample = distr.rsample([x.shape[0]])
                     subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
                 weights_normal.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                   
@@ -232,10 +230,9 @@ class SearchCNNController(nn.Module):
 
                 for subalpha, subcov in zip(alpha, cov):                    
                     subsample.append([])
-                    subcov = torch.tril(subcov)
-                    subcov.fill_diagonal_(1.0)
-                    cov_matrix = torch.mm(subcov, subcov.t())
-                    distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
                     sample = distr.rsample([x.shape[0]])
                     subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
                 weights_reduce.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                    
