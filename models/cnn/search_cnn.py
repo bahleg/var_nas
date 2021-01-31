@@ -219,6 +219,8 @@ class SearchCNNController(nn.Module):
                 subsample = []             
                 for subalpha, subcov in zip(alpha, cov):                    
                     subsample.append([])
+                    subcov = torch.tril(subcov)
+                    subcov.fill_diagonal_(1.0)
                     cov_matrix = torch.mm(subcov, subcov.t())
                     distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
                     sample = distr.rsample([x.shape[0]])
@@ -230,6 +232,8 @@ class SearchCNNController(nn.Module):
 
                 for subalpha, subcov in zip(alpha, cov):                    
                     subsample.append([])
+                    subcov = torch.tril(subcov)
+                    subcov.fill_diagonal_(1.0)
                     cov_matrix = torch.mm(subcov, subcov.t())
                     distr = torch.distributions.multivariate_normal.MultivariateNormal(loc=subalpha, covariance_matrix=cov_matrix)
                     sample = distr.rsample([x.shape[0]])
@@ -269,6 +273,14 @@ class SearchCNNController(nn.Module):
         for alpha in self.alpha_reduce:
             logger.info(F.softmax(alpha, dim=-1))
         logger.info("#####################")
+        
+        if self.sampling_mode == 'igr':
+            logger.info("\n# Covariance - normal")
+            for alpha in self.alpha_cov_normal:
+                logger.info(alpha)
+            logger.info("\n# Covariance - reduce")
+            for alpha in self.alpha_cov_reduce:
+                logger.info(alpha)        
 
         # restore formats
         for handler, formatter in zip(logger.handlers, org_formatters):
@@ -290,7 +302,7 @@ class SearchCNNController(nn.Module):
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step(epoch=e)    
         self.t = self.t + self.delta_t*e
-        
+        #self.print_alphas(l)        
 
     def writer_callback(self, writer,  epoch, cur_step):
         hist_values = []
