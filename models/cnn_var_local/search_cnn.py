@@ -70,7 +70,7 @@ class LVarSearchCNN(nn.Module):
         self.linear = LocalVarLinear(C_p, n_classes)
 
         self.t = float(t)
-
+        self.init_t = float(t)
         self.q_gamma_normal = nn.ParameterList()
         self.q_gamma_reduce = nn.ParameterList()
         n_ops = len(primitives)
@@ -242,7 +242,7 @@ class LVarSearchCNNController(nn.Module):
 
     def new_epoch(self, e, writer, l):
         self.lr_scheduler.step(epoch=e)   
-        self.net.t = self.net.t + self.delta*e
+        self.net.t = self.net.init_t + self.delta*e
 
     def forward(self, x):
         return self.net(x)
@@ -258,7 +258,7 @@ class LVarSearchCNNController(nn.Module):
         if self.stochastic_w:
             for w, h in self.alpha_w_h.items():
                 k += kl_normal_normal(w, torch.zeros_like(w),
-                                      torch.exp(self.sigmas_w[w]), torch.exp(h))
+                                      0.01+torch.exp(self.sigmas_w[w]), 0.01+torch.exp(h))
 
         if self.stochastic_gamma:
             t = torch.ones(1).to(self.device)*self.net.t
@@ -268,7 +268,7 @@ class LVarSearchCNNController(nn.Module):
                 sample = (g.rsample([self.sample_num])+0.0001)
                 k += (g.log_prob(sample)).sum() / self.sample_num
 
-            for a, ga in zip(self.alpha_normal, self.net.q_gamma_reduce):
+            for a, ga in zip(self.alpha_reduce, self.net.q_gamma_reduce):
                 g = torch.distributions.RelaxedOneHotCategorical(
                     t, logits=ga)
                 sample = (g.rsample([self.sample_num])+0.0001)

@@ -94,7 +94,7 @@ class AverageMeter():
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
+        #self.avg = np.nan
 
 def accuracy(output, target, topk=(1,)):
     """ Computes the precision@k for the specified values of k """

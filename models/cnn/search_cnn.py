@@ -101,6 +101,8 @@ class SearchCNNController(nn.Module):
         self.device = kwargs['device']
         self.criterion = nn.CrossEntropyLoss().to(self.device)        
         self.t = float(subcfg['initial temp'])
+        self.init_t = float(subcfg['initial temp'])
+        
         self.delta_t = float(subcfg['delta'])
         # initialize architect parameters: alphas
         if subcfg['primitives'] == 'DARTS':
@@ -298,7 +300,7 @@ class SearchCNNController(nn.Module):
 
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step(epoch=e)    
-        self.t = self.t + self.delta_t*e
+        self.t = self.init_t + self.delta_t*e
         #self.print_alphas(l)        
 
     def writer_callback(self, writer,  epoch, cur_step):
