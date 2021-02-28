@@ -304,6 +304,7 @@ class SearchCNNController(nn.Module):
         #self.print_alphas(l)        
 
     def writer_callback(self, writer,  epoch, cur_step):
+        pass
         #hist_values = []
         #for val in self.alphas():
         #    hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
