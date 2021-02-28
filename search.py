@@ -33,7 +33,6 @@ def main():
     input_size, input_channels, n_classes, train_data = utils.get_data(
         config.dataset, config.data_path, cutout_length=0, validation=False)
     
-    debug = int(config.debug)!=0
     module_name, class_name = config.model_class.rsplit('.', 1)
     controller_cls = getattr(import_module(module_name), class_name)
     model = None 
@@ -97,7 +96,7 @@ def main():
 
             model.new_epoch(epoch, writer, logger) 
             # training
-            train_qual = train(train_loader, valid_loader, model, epoch, writer,  config, logger, debug)        
+            train_qual = train(train_loader, valid_loader, model, epoch, writer,  config, logger)        
                         
             # validation
             cur_step = (epoch+1) * len(train_loader)
@@ -126,7 +125,7 @@ def main():
         logger.info("Final best =  {}".format(best))    
 
 
-def train(train_loader, valid_loader, model, epoch, writer,  config, logger, debug=False):
+def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
     losses = utils.AverageMeter()
@@ -155,11 +154,6 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger, deb
                     epoch+1, config.epochs, step, len(train_loader)-1, losses=losses,
                     top1=top1))
             model.writer_callback(writer, epoch, cur_step)
-            if debug and np.isnan(losses.avg):
-               import pickle
-               with open('_debug.pckl', 'wb') as out:
-                   out.write(pickle.dumps([losses, model]))
-               exit(1)
 
         
         
