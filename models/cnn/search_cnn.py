@@ -304,11 +304,11 @@ class SearchCNNController(nn.Module):
         #self.print_alphas(l)        
 
     def writer_callback(self, writer,  epoch, cur_step):
-        hist_values = []
-        for val in self.alphas():
-            hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
-        hist_values = np.array(hist_values).flatten().tolist()
-        writer.add_histogram('train/alphas', hist_values, cur_step)  # %%
+        #hist_values = []
+        #for val in self.alphas():
+        #    hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
+        #hist_values = np.array(hist_values).flatten().tolist()
+        #writer.add_histogram('train/alphas', hist_values, cur_step)  # %%
 
         #writer.add_scalar('train/temp_min', torch.exp(self.net.log_q_t_mean-2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
         #writer.add_scalar('train/temp_max', torch.exp(self.net.log_q_t_mean+2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
