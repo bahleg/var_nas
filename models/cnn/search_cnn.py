@@ -4,14 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from models.cnn.search_cells import SearchCell
 from models.cnn.architect import Architect
-from models.cnn import ops 
+from models.cnn import ops
 from torch.nn.parallel._functions import Broadcast
 from visualize import plot
 import genotypes as gt
 import logging
 import numpy as np
-
-
 
 
 def broadcast_list(l, device_ids):
@@ -88,88 +86,42 @@ class SearchCNNController(nn.Module):
     """ SearchCNN controller supporting multi-gpu """
 
     def __init__(self, **kwargs):
-        super().__init__()        
+        super().__init__()
         subcfg = kwargs['darts']
         C_in = int(subcfg['input_channels'])
         C = int(subcfg['init_channels'])
         n_classes = int(subcfg['n_classes'])
         n_layers = int(subcfg['layers'])
         n_nodes = int(subcfg['n_nodes'])
-        stem_multiplier = int(subcfg['stem_multiplier'])     
+        stem_multiplier = int(subcfg['stem_multiplier'])
         self.sampling_mode = subcfg['sampling_mode']
-        self.n_nodes = n_nodes        
+        self.n_nodes = n_nodes
         self.device = kwargs['device']
-        self.criterion = nn.CrossEntropyLoss().to(self.device)        
+        self.criterion = nn.CrossEntropyLoss().to(self.device)
         self.t = float(subcfg['initial temp'])
         self.init_t = float(subcfg['initial temp'])
-        
+
         self.delta_t = float(subcfg['delta'])
-        # initialize architect parameters: alphas
-        if subcfg['primitives'] == 'DARTS':
-            primitives = [
-                'max_pool_3x3',
-                'avg_pool_3x3',
-                'skip_connect', # identity
-                'sep_conv_3x3',
-                'sep_conv_5x5',
-                'dil_conv_3x3',
-                'dil_conv_5x5',
-                'none'
-            ] 
-        elif subcfg['primitives'] == 'DARTS non-zero':
-            primitives = [
-                'max_pool_3x3',
-                'avg_pool_3x3',
-                'skip_connect', # identity
-                'sep_conv_3x3',
-                'sep_conv_5x5',
-                'dil_conv_3x3',
-                'dil_conv_5x5',
-            ]            
-        else:
-            raise ValueError('Incorrect value for primitives')
-        n_ops = len(primitives)
+        primitives = self.get_primitives(kwargs)
 
-        self.alpha_normal = nn.ParameterList()
-        self.alpha_reduce = nn.ParameterList()
-        
-        if self.sampling_mode == 'igr':
-            self.alpha_cov_normal = nn.ParameterList()
-            self.alpha_cov_reduce = nn.ParameterList()
-
-        for i in range(n_nodes):
-            if n_layers>=3:
-                self.alpha_normal.append(                    
-                    nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
-                if self.sampling_mode == 'igr':                
-                    self.alpha_cov_normal.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)*0.1))
-            self.alpha_reduce.append(
-                nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
-            if self.sampling_mode == 'igr':                
-                self.alpha_cov_reduce.append(nn.Parameter(torch.randn(i+2, n_ops, n_ops)*0.1))
-
-
-        # setup alphas list
-        self._alphas = []
-        for n, p in self.named_parameters():
-            if 'alpha' in n:
-                self._alphas.append((n, p))
-
+        self.init_alphas(kwargs)
         self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier )
-        
+                             n_nodes, stem_multiplier)
+
         # weights optimizer
         self.w_optim = torch.optim.SGD(self.weights(), float(subcfg['optim']['w_lr']), momentum=float(subcfg['optim']['w_momentum']),
-                                weight_decay=float(subcfg['optim']['w_weight_decay']))
+                                       weight_decay=float(subcfg['optim']['w_weight_decay']))
         # alphas optimizer
         self.alpha_optim = torch.optim.Adam(self.alphas(), float(subcfg['optim']['alpha_lr']), betas=(0.5, 0.999),
-                                    weight_decay=float(subcfg['optim']['alpha_weight_decay']))
+                                            weight_decay=float(subcfg['optim']['alpha_weight_decay']))
 
         self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        self.w_optim, int(kwargs['epochs']), eta_min=float(subcfg['optim']['w_lr_min']))
+            self.w_optim, int(kwargs['epochs']), eta_min=float(subcfg['optim']['w_lr_min']))
 
-        self.simple_alpha_update = int(subcfg['optim']['simple_alpha_update'])!=0
-        self.architect = Architect(self, float(subcfg['optim']['w_momentum']), float(subcfg['optim']['w_weight_decay']))
+        self.simple_alpha_update = int(
+            subcfg['optim']['simple_alpha_update']) != 0
+        self.architect = Architect(self, float(
+            subcfg['optim']['w_momentum']), float(subcfg['optim']['w_weight_decay']))
         self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
 
     def train_step(self, trn_X, trn_y, val_X, val_y):
@@ -177,13 +129,12 @@ class SearchCNNController(nn.Module):
         self.alpha_optim.zero_grad()
         if self.simple_alpha_update:
             arch_loss = self.architect.net.loss(val_X, val_y)
-            arch_loss.backward()            
+            arch_loss.backward()
         else:
             self.architect.unrolled_backward(
                 trn_X, trn_y, val_X, val_y, lr, self.w_optim)
-        
+
         self.alpha_optim.step()
-      
 
         # phase 1. child network step (w)
         self.w_optim.zero_grad()
@@ -192,56 +143,116 @@ class SearchCNNController(nn.Module):
         # gradient clipping
         nn.utils.clip_grad_norm_(self.weights(), self.w_grad_clip)
 
-        self.w_optim.step()        
-        return loss 
+        self.w_optim.step()
+        return loss
 
-        
+    def get_primitives(self, config):
+        subcfg = config['darts']
+        if subcfg['primitives'] == 'DARTS':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect',  # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+                'none'
+            ]
+        elif subcfg['primitives'] == 'DARTS non-zero':
+            primitives = [
+                'max_pool_3x3',
+                'avg_pool_3x3',
+                'skip_connect',  # identity
+                'sep_conv_3x3',
+                'sep_conv_5x5',
+                'dil_conv_3x3',
+                'dil_conv_5x5',
+            ]
+        else:
+            raise ValueError('Incorrect value for primitives')
+        return primitives
+
+    def init_alphas(self,  config):
+        primitives = self.get_primitives(config)
+        subcfg = config['darts']
+        n_layers = int(subcfg['layers'])
+        n_nodes = int(subcfg['n_nodes'])
+        # initialize architect parameters: alphas
+        n_ops = len(primitives)
+        self.alpha_normal = nn.ParameterList()
+        self.alpha_reduce = nn.ParameterList()
+
+        if self.sampling_mode == 'igr':
+            self.alpha_cov_normal = nn.ParameterList()
+            self.alpha_cov_reduce = nn.ParameterList()
+
+        for i in range(n_nodes):
+            if n_layers >= 3:
+                self.alpha_normal.append(
+                    nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
+                if self.sampling_mode == 'igr':
+                    self.alpha_cov_normal.append(nn.Parameter(
+                        torch.randn(i+2, n_ops, n_ops)*0.1))
+            self.alpha_reduce.append(
+                nn.Parameter(1e-3*torch.randn(i+2, n_ops)))
+            if self.sampling_mode == 'igr':
+                self.alpha_cov_reduce.append(nn.Parameter(
+                    torch.randn(i+2, n_ops, n_ops)*0.1))
+
+        # setup alphas list
+        self._alphas = []
+        for n, p in self.named_parameters():
+            if 'alpha' in n:
+                self._alphas.append((n, p))
 
     def forward(self, x):
         if self.sampling_mode == 'softmax':
             weights_normal = [F.softmax(alpha/self.t, dim=-1)
-                                      for alpha in self.alpha_normal]
+                              for alpha in self.alpha_normal]
             weights_reduce = [F.softmax(alpha/self.t, dim=-1)
-                                    for alpha in self.alpha_reduce]
+                              for alpha in self.alpha_reduce]
 
         elif self.sampling_mode == 'gumbel-softmax':
             weights_normal = [torch.distributions.RelaxedOneHotCategorical(
-                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
+                self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
             weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
-                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]        
+                self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]
         elif self.sampling_mode == 'naive':
-            weights_normal = self.alpha_normal 
-            weights_reduce = self.alpha_reduce     
+            weights_normal = self.alpha_normal
+            weights_reduce = self.alpha_reduce
         elif self.sampling_mode == 'igr':
 
             weights_normal = []
             weights_reduce = []
 
-            for alpha, cov in zip(self.alpha_normal, self.alpha_cov_normal):  
-                subsample = []             
-                for subalpha, subcov in zip(alpha, cov):                    
-                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
-                                                                                              subcov,
-                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
+            for alpha, cov in zip(self.alpha_normal, self.alpha_cov_normal):
+                subsample = []
+                for subalpha, subcov in zip(alpha, cov):
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,
+                                                                                                      subcov,
+                                                                                                      torch.ones(subalpha.shape[0]).to(self.device))
                     sample = distr.rsample([x.shape[0]])
-                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
-                weights_normal.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                   
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))
+                weights_normal.append(torch.stack(
+                    [torch.cat(s, 1) for s in subsample], 1))
 
-            for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):  
-                subsample = []             
+            for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):
+                subsample = []
 
-                for subalpha, subcov in zip(alpha, cov):                    
+                for subalpha, subcov in zip(alpha, cov):
                     subsample.append([])
-                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
-                                                                                              subcov,
-                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
+                    distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,
+                                                                                                      subcov,
+                                                                                                      torch.ones(subalpha.shape[0]).to(self.device))
                     sample = distr.rsample([x.shape[0]])
-                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))                              
-                weights_reduce.append(torch.stack([torch.cat(s, 1) for s in subsample], 1))                    
-                                
+                    subsample[-1].append(F.softmax(sample/self.t, dim=-1))
+                weights_reduce.append(torch.stack(
+                    [torch.cat(s, 1) for s in subsample], 1))
+
         else:
             raise ValueError('Bad sampling mode')
-        
+
         return self.net(x, weights_normal, weights_reduce)
 
     def loss(self, X, y):
@@ -250,7 +261,6 @@ class SearchCNNController(nn.Module):
 
     def weights(self):
         return self.net.parameters()
-
 
     def alphas(self):
         for n, p in self._alphas:
@@ -272,14 +282,14 @@ class SearchCNNController(nn.Module):
         for alpha in self.alpha_reduce:
             logger.info(F.softmax(alpha, dim=-1))
         logger.info("#####################")
-        
+
         if self.sampling_mode == 'igr':
             logger.info("\n# Covariance - normal")
             for alpha in self.alpha_cov_normal:
                 logger.info(alpha)
             logger.info("\n# Covariance - reduce")
             for alpha in self.alpha_cov_reduce:
-                logger.info(alpha)        
+                logger.info(alpha)
 
         # restore formats
         for handler, formatter in zip(logger.handlers, org_formatters):
@@ -299,17 +309,17 @@ class SearchCNNController(nn.Module):
         plot(self.genotype().reduce, plot_path+'-reduce', caption+'-reduce')
 
     def new_epoch(self, e, w, l):
-        self.lr_scheduler.step(epoch=e)    
+        self.lr_scheduler.step(epoch=e)
         self.t = self.init_t + self.delta_t*e
-        #self.print_alphas(l)        
+        # self.print_alphas(l)
 
     def writer_callback(self, writer,  epoch, cur_step):
         pass
         #hist_values = []
-        #for val in self.alphas():
+        # for val in self.alphas():
         #    hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
         #hist_values = np.array(hist_values).flatten().tolist()
-        #writer.add_histogram('train/alphas', hist_values, cur_step)  # %%
+        # writer.add_histogram('train/alphas', hist_values, cur_step)  # %%
 
         #writer.add_scalar('train/temp_min', torch.exp(self.net.log_q_t_mean-2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
         #writer.add_scalar('train/temp_max', torch.exp(self.net.log_q_t_mean+2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)

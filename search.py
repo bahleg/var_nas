@@ -144,7 +144,9 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
         losses.update(loss.item(), N)
 
         if step ==  len(train_loader)-1:
+            model.eval()
             logits = model(trn_X)
+            model.train()
             prec1 = utils.accuracy(
                 logits, trn_y)[0]
             top1.update(prec1.item(), N)
