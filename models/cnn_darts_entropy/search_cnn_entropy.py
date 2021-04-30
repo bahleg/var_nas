@@ -16,9 +16,9 @@ MIN_ALPHA = 0.2
 class SearchCNNControllerWithEntropy(SearchCNNController):
 
     def __init__(self, **kwargs):
-        self.log_t = None                 
+        #self.log_t = None                 
         SearchCNNController.__init__(self, **kwargs)
-        self.log_t =  torch.nn.Parameter(torch.zeros(1))
+        #self.log_t =  torch.nn.Parameter(torch.zeros(1))
         self.e_alpha = (torch.ones(1)*(float(kwargs['darts entropy']['expected entropy']))).to(self.device)        
         self.e_lam = float(kwargs['darts entropy']['entropy regularizer coef'])
         self.e_sample_num  = int(kwargs['darts entropy']['entropy sample num'])
@@ -28,8 +28,8 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
     def alphas(self):
         for n, p in self._alphas:
             yield p
-        if self.log_t is not None:
-            yield self.log_t
+        #if self.log_t is not None:
+        #    yield self.log_t
     
     def calc_entropy(self):
         if self.sampling_mode == 'gumbel-softmax':
@@ -44,7 +44,7 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
         entropy = 0
         for alpha in list(self.alpha_reduce) + list(self.alpha_normal):
             for subalpha in alpha:                
-                    distr = torch.distributions.RelaxedOneHotCategorical(MIN_ALPHA+torch.exp(self.log_t), logits=subalpha)
+                    distr = torch.distributions.RelaxedOneHotCategorical(self.t, logits=subalpha)
                     subentropy = 0
                     for _ in range(self.e_sample_num):
                         subentropy -= distr.log_prob(distr.rsample())
@@ -79,7 +79,7 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
                 subentropy = 0
                 for _ in range(self.e_sample_num):
                     sample = distr.sample()                
-                    subentropy=subentropy -distr.log_prob(sample) +self.log_det_jac(sample, MIN_ALPHA+torch.exp(self.log_t))
+                    subentropy=subentropy -distr.log_prob(sample) +self.log_det_jac(sample, self.t)
                 subentropy /= self.e_sample_num
                 entropy += subentropy
         return entropy
@@ -87,9 +87,9 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
     def forward(self, x):
         if self.sampling_mode == 'gumbel-softmax':
             weights_normal = [torch.distributions.RelaxedOneHotCategorical(
-                    MIN_ALPHA+torch.exp(self.log_t), logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
+                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_normal]
             weights_reduce = [torch.distributions.RelaxedOneHotCategorical(
-                    MIN_ALPHA+torch.exp(self.log_t), logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]   
+                    self.t, logits=alpha).rsample([x.shape[0]]) for alpha in self.alpha_reduce]   
         elif self.sampling_mode == 'igr':
 
             weights_normal = []
@@ -126,8 +126,9 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
 
 
     def loss(self, X, y):
-        logits = self.forward(X)                     
-        return   self.criterion(logits, y) + self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2 
+        #logits = self.forward(X)                     
+        #return   self.criterion(logits, y) + self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2 
+        return self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2
 
 
     def print_alphas(self, logger):
@@ -149,7 +150,7 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
 
         logger.info("\n# t")
         
-        logger.info( MIN_ALPHA+torch.exp(self.log_t))
+        logger.info(self.t)
         logger.info("#####################")
 
         logger.info("\n# Entropy")
@@ -163,5 +164,6 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
 
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step(epoch=e)    
-        self.t = self.t + self.delta_t*e
+        self.t = self.init_t + self.delta_t*e
+        self.t = torch.tensor(self.t).to(self.device)
         self.print_alphas(l)

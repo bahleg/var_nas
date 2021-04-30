@@ -311,6 +311,7 @@ class SearchCNNController(nn.Module):
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step(epoch=e)
         self.t = self.init_t + self.delta_t*e
+        self.t = torch.tensor(self.t).to(self.device)
         # self.print_alphas(l)
 
     def writer_callback(self, writer,  epoch, cur_step):
