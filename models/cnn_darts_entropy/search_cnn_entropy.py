@@ -30,8 +30,31 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
             yield p
         #if self.log_t is not None:
         #    yield self.log_t
-    
+
+    def calc_entropy_cat(self):
+        entropy = 0
+        for alpha in list(self.alpha_reduce) + list(self.alpha_normal):
+            for subalpha in alpha:
+                    distr = torch.distributions.categorical.Categorical(logits=subalpha)
+                    entropy += distr.entropy()
+        return entropy
+    def calc_entropy_cat_igr(self):
+        entropy = 0
+        SSIZE = 30
+        for alpha, cov in zip(self.alpha_reduce, self.alpha_cov_reduce):
+            for subalpha, subcov in zip(alpha, cov):
+                distr = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(subalpha,     
+                                                                                              subcov,
+                                                                                              torch.ones(subalpha.shape[0]).to(self.device))
+                entropy +=  torch.distributions.categorical.Categorical(probs=torch.nn.functional.softmax(distr.rsample([SSIZE])/0.01).mean(0)).entropy()
+        return entropy
+        
+                        
     def calc_entropy(self):
+        if self.sampling_mode == 'igr':
+              return self.calc_entropy_cat_igr()
+        return self.calc_entropy_cat()
+
         if self.sampling_mode == 'gumbel-softmax':
             return self.calc_entropy_gs()
         elif self.sampling_mode == 'igr':
@@ -126,9 +149,9 @@ class SearchCNNControllerWithEntropy(SearchCNNController):
 
 
     def loss(self, X, y):
-        #logits = self.forward(X)                     
-        #return   self.criterion(logits, y) + self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2 
-        return self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2
+        logits = self.forward(X)                     
+        return  self.criterion(logits, y) + self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2 
+        #return self.e_lam*(self.e_alpha  - self.calc_entropy()) ** 2
 
 
     def print_alphas(self, logger):
