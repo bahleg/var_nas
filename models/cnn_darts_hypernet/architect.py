@@ -19,9 +19,8 @@ class HypernetArchitect(Architect):
             w_optim: weights optimizer
         """
         # forward & calc loss
-        loss = self.net.loss(trn_X, trn_y, lam) # L_trn(w)
-
-        # compute gradient
+        loss = self.net.loss(trn_X, trn_y, lam) # L_trn(w)        
+        # compute gradient        
         gradients = torch.autograd.grad(loss, self.net.weights())
 
         # do virtual step (update gradient)

@@ -31,7 +31,7 @@ def main():
 
     # get data with meta info
     input_size, input_channels, n_classes, train_data = utils.get_data(
-        config.dataset, config.data_path, cutout_length=0, validation=False)
+        config.dataset, config.data_path, cutout_length=int(config.cutout), validation=False)
     
     module_name, class_name = config.model_class.rsplit('.', 1)
     controller_cls = getattr(import_module(module_name), class_name)
@@ -43,8 +43,10 @@ def main():
         if model is not None:
             del model 
             if 'cuda' in config.device:
-                torch.cuda.empty_cache()           
-        model = controller_cls(**config.__dict__)
+                torch.cuda.empty_cache()        
+        model_params = config.__dict__
+        model_params['seed'] = seed
+        model = controller_cls(**model_params)
         model = model.to(device)    
 
         # split data to train/validation

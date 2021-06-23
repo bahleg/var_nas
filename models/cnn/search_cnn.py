@@ -169,6 +169,12 @@ class SearchCNNController(nn.Module):
                 'dil_conv_3x3',
                 'dil_conv_5x5',
             ]
+        elif subcfg['primitives'] == 'simple':
+            primitives = [
+                'sep_conv_3x3',
+                'none'
+            ]
+            
         else:
             raise ValueError('Incorrect value for primitives')
         return primitives
