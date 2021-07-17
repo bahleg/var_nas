@@ -23,7 +23,7 @@ def broadcast_list(l, device_ids):
 class SearchCNN(nn.Module):
     """ Search CNN model """
 
-    def __init__(self, primitives,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3):
+    def __init__(self, primitives,  C_in, C, n_classes, n_layers, n_nodes=4, stem_multiplier=3, drop=0.0):
         """
         Args:
             C_in: # of input channels
@@ -60,7 +60,7 @@ class SearchCNN(nn.Module):
                 reduction = False
 
             cell = SearchCell(n_nodes,   C_pp, C_p, C_cur,
-                              reduction_p, reduction, primitives)
+                              reduction_p, reduction, primitives, drop)
             reduction_p = reduction
             self.cells.append(cell)
             C_cur_out = C_cur * n_nodes
@@ -88,6 +88,7 @@ class SearchCNNController(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         subcfg = kwargs['darts']
+        drop = float(subcfg['drop path proba'])
         C_in = int(subcfg['input_channels'])
         C = int(subcfg['init_channels'])
         n_classes = int(subcfg['n_classes'])
@@ -106,7 +107,7 @@ class SearchCNNController(nn.Module):
 
         self.init_alphas(kwargs)
         self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier)
+                             n_nodes, stem_multiplier, drop)
 
         # weights optimizer
         self.w_optim = torch.optim.SGD(self.weights(), float(subcfg['optim']['w_lr']), momentum=float(subcfg['optim']['w_momentum']),

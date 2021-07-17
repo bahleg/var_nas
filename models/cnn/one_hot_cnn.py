@@ -19,8 +19,20 @@ class OneHotSearchCNNController(SearchCNNController):
 
     def __init__(self, **kwargs):        
         SearchCNNController.__init__(self, **kwargs)
-        with open(kwargs['one-hot']['genotype path'].format(kwargs['seed'])) as inp:
-            self.weights_reduce, self.weights_normal = json.loads(inp.read())
+        self.aux = float(kwargs['one-hot']['aux weight'])
+        if self.aux > 0.0:
+           raise NotImplementedError('Aux')
+        if kwargs['one-hot']['genotype path'] == 'random-simple':
+            self.weights_reduce = []
+            self.weights_normal = []
+            for alpha in self.alpha_reduce:
+               self.weights_reduce.append(np.random.randint(low=0, high=alpha.shape[1], size=alpha.shape[0]).tolist())
+            for alpha in self.alpha_normal:
+               self.weights_normal.append(np.random.randint(low=0, high=alpha.shape[1], size=alpha.shape[0]).tolist())
+
+        else:
+            with open(kwargs['one-hot']['genotype path'].format(kwargs['seed'])) as inp:
+                self.weights_reduce, self.weights_normal = json.loads(inp.read())
             
     def train_step(self, trn_X, trn_y, val_X, val_y):
         lr = self.lr_scheduler.get_last_lr()[0]

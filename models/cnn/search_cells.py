@@ -8,7 +8,7 @@ class SearchCell(nn.Module):
     """ Cell for search
     Each edge is mixed and continuous relaxed.
     """
-    def __init__(self, n_nodes, C_pp, C_p, C, reduction_p, reduction, primitives):
+    def __init__(self, n_nodes, C_pp, C_p, C, reduction_p, reduction, primitives, drop=0.0):
         """
         Args:
             n_nodes: # of intermediate n_nodes
@@ -37,7 +37,7 @@ class SearchCell(nn.Module):
             for j in range(2+i): # include 2 input nodes
                 # reduction should be used only for input node
                 stride = 2 if reduction and j < 2 else 1
-                op = ops.MixedOp(C, stride, primitives)
+                op = ops.MixedOp(C, stride, primitives, drop)
                 self.dag[i].append(op)
 
     def forward(self, s0, s1, w_dag):

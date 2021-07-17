@@ -185,11 +185,14 @@ class FactorizedReduce(nn.Module):
 
 class MixedOp(nn.Module):
     """ Mixed operation """
-    def __init__(self, C, stride, primitives):
+    def __init__(self, C, stride, primitives, drop = 0.0):
         super().__init__()
         self._ops = nn.ModuleList()
         for primitive in primitives:
             op = OPS[primitive](C, stride, affine=False)
+            if not isinstance(op, Identity) and drop>0.0:
+               op = nn.Sequential(op, DropPath_(drop)  )
+
             self._ops.append(op)
 
     def forward(self, x, weights):
