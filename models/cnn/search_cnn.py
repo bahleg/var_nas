@@ -85,8 +85,7 @@ class SearchCNN(nn.Module):
 class SearchCNNController(nn.Module):
     """ SearchCNN controller supporting multi-gpu """
 
-    def __init__(self, **kwargs):
-        super().__init__()
+    def init_net(self, kwargs):
         subcfg = kwargs['darts']
         drop = float(subcfg['drop path proba'])
         C_in = int(subcfg['input_channels'])
@@ -95,7 +94,21 @@ class SearchCNNController(nn.Module):
         n_layers = int(subcfg['layers'])
         n_nodes = int(subcfg['n_nodes'])
         stem_multiplier = int(subcfg['stem_multiplier'])
+        
+        primitives = self.get_primitives(kwargs)
+
+
+        self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
+                             n_nodes, stem_multiplier, drop)
+                             
+    def __init__(self, **kwargs):
+        super().__init__()    
+        subcfg = kwargs['darts']            
+        self.init_net(kwargs)
+
         self.sampling_mode = subcfg['sampling_mode']
+        n_nodes = int(subcfg['n_nodes'])
+        
         self.n_nodes = n_nodes
         self.device = kwargs['device']
         self.criterion = nn.CrossEntropyLoss().to(self.device)
@@ -103,12 +116,7 @@ class SearchCNNController(nn.Module):
         self.init_t = float(subcfg['initial temp'])
 
         self.delta_t = float(subcfg['delta'])
-        primitives = self.get_primitives(kwargs)
-
-        self.init_alphas(kwargs)
-        self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier, drop)
-
+        self.init_alphas(kwargs)        
         # weights optimizer
         self.w_optim = torch.optim.SGD(self.weights(), float(subcfg['optim']['w_lr']), momentum=float(subcfg['optim']['w_momentum']),
                                        weight_decay=float(subcfg['optim']['w_weight_decay']))
@@ -304,30 +312,14 @@ class SearchCNNController(nn.Module):
 
     def genotype(self):
         raise NotImplementedError()
-        gene_normal = gt.parse(self.alpha_normal, k=2)
-        gene_reduce = gt.parse(self.alpha_reduce, k=2)
-        concat = range(2, 2+self.n_nodes)  # concat all intermediate nodes
 
-        return gt.Genotype(normal=gene_normal, normal_concat=concat,
-                           reduce=gene_reduce, reduce_concat=concat)
-
-    def plot_genotype(self, plot_path, caption):
-        plot(self.genotype().normal, plot_path+'-normal', caption+'-normal')
-        plot(self.genotype().reduce, plot_path+'-reduce', caption+'-reduce')
 
     def new_epoch(self, e, w, l):
         self.lr_scheduler.step(epoch=e)
         self.t = self.init_t + self.delta_t*e
         self.t = torch.tensor(self.t).to(self.device)
-        # self.print_alphas(l)
+
 
     def writer_callback(self, writer,  epoch, cur_step):
         pass
-        #hist_values = []
-        # for val in self.alphas():
-        #    hist_values.extend(F.softmax(val).cpu().detach().numpy().tolist())
-        #hist_values = np.array(hist_values).flatten().tolist()
-        # writer.add_histogram('train/alphas', hist_values, cur_step)  # %%
 
-        #writer.add_scalar('train/temp_min', torch.exp(self.net.log_q_t_mean-2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)
-        #writer.add_scalar('train/temp_max', torch.exp(self.net.log_q_t_mean+2*torch.exp(self.net.log_q_t_log_sigma)).cpu().detach().numpy(), cur_step)

@@ -337,3 +337,23 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
         SearchCNNController.new_epoch(self, e,w,l)
         self.cur_e = e
         
+    def genotype(self, lam, mode='DARTS'):
+        w_normal, w_reduce = [], []
+        if mode == 'DARTS':
+            for w_out, alphas in zip((w_normal, w_reduce), (self.hyper_normal, self.hyper_reduce)):                
+                for alpha in alphas:
+                    edges = alpha(lam)
+                    edge_max, primitive_indices = torch.topk(edges[:, :-1], 1) # ignore 'none'
+                    topk_edge_values, topk_edge_indices = torch.topk(edge_max.view(-1), 2) # get top-2
+                    w_out.append([edges.shape[1]]*len(edges))
+                    for k in topk_edge_indices:                        
+                        w_out[-1][k.item()] = primitive_indices[k.item()][0].item()
+        else:
+            raise NotImplemntedError('Unknown genotype extraction mode:'+mode)
+        return w_normal, w_reduce
+                    
+                
+            
+            
+        
+        
