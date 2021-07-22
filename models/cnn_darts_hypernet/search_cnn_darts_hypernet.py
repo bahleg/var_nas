@@ -348,6 +348,13 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
                     w_out.append([edges.shape[1]]*len(edges))
                     for k in topk_edge_indices:                        
                         w_out[-1][k.item()] = primitive_indices[k.item()][0].item()
+        elif mode == 'simple':
+            for alpha in self.hyper_reduce:
+                alpha = alpha(lam)
+                w_reduce.append((torch.argmax(alpha, 1).cpu().detach().numpy()).tolist())
+            for alpha in self.hyper_normal:
+                alpha = alpha(lam)
+                w_normal.append((torch.argmax(alpha, 1).cpu().detach().numpy()).tolist())    
         else:
             raise NotImplemntedError('Unknown genotype extraction mode:'+mode)
         return w_normal, w_reduce
