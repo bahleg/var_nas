@@ -345,7 +345,7 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
                     edges = alpha(lam)
                     edge_max, primitive_indices = torch.topk(edges[:, :-1], 1) # ignore 'none'
                     topk_edge_values, topk_edge_indices = torch.topk(edge_max.view(-1), 2) # get top-2
-                    w_out.append([edges.shape[1]]*len(edges))
+                    w_out.append([edges.shape[1]-1]*(len(edges)))
                     for k in topk_edge_indices:                        
                         w_out[-1][k.item()] = primitive_indices[k.item()][0].item()
         elif mode == 'simple':
