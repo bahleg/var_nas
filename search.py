@@ -30,8 +30,8 @@ def main():
     torch.backends.cudnn.benchmark = True
 
     # get data with meta info
-    input_size, input_channels, n_classes, train_data = utils.get_data(
-        config.dataset, config.data_path, cutout_length=int(config.cutout), validation=False)
+    input_size, input_channels, n_classes, train_data, valid_data = utils.get_data(
+        config.dataset, config.data_path, cutout_length=int(config.cutout), validation=True)
     
     module_name, class_name = config.model_class.rsplit('.', 1)
     controller_cls = getattr(import_module(module_name), class_name)
@@ -51,31 +51,39 @@ def main():
 
         # split data to train/validation
         n_train = len(train_data)
-        split = int(n_train * float(config.validate_split))
-        indices = list(range(n_train))
-        if split <= 0:
-            logger.info('using train as validation')
-            valid_sampler = train_sampler = torch.utils.data.sampler.SubsetRandomSampler(
-                indices)
-        else:
-            train_sampler = torch.utils.data.sampler.SubsetRandomSampler(
-                indices[:split])
-            valid_sampler = torch.utils.data.sampler.SubsetRandomSampler(
-                indices[split:])
-
-        train_loader = torch.utils.data.DataLoader(train_data,
-                                                batch_size=int(config.batch_size),
-                                                sampler=train_sampler,
-                                                num_workers=int(config.workers),
-                                                pin_memory=True)
-        valid_loader = torch.utils.data.DataLoader(train_data,
+        
+        if float(config.validate_split)>=0:
+            split = int(n_train * float(config.validate_split))
+            indices = list(range(n_train))
+            if split <= 0:
+                logger.info('using train as validation')
+                valid_sampler = train_sampler = torch.utils.data.sampler.SubsetRandomSampler(
+                    indices)
+            else:
+                train_sampler = torch.utils.data.sampler.SubsetRandomSampler(
+                    indices[:split])
+                valid_sampler = torch.utils.data.sampler.SubsetRandomSampler(
+                    indices[split:])
+                train_loader = torch.utils.data.DataLoader(train_data,batch_size=int(config.batch_size), sampler=train_sampler,  num_workers=int(config.workers),    pin_memory=True)
+                valid_loader = torch.utils.data.DataLoader(train_data,
                                                 batch_size=int(config.batch_size),
                                                 sampler=valid_sampler,
                                                 num_workers=int(config.workers),
                                                 pin_memory=True)
 
         
-
+        else:
+            logger.info('using test as validation. Use it only for the training with already defined architecture!')
+        train_loader = torch.utils.data.DataLoader(train_data,
+                                               batch_size=int(config.batch_size),
+                                               shuffle=True,
+                                               num_workers=int(config.workers),
+                                               pin_memory=True)
+        valid_loader = torch.utils.data.DataLoader(valid_data,
+                                               batch_size=int(config.batch_size),
+                                               shuffle=False,
+                                               num_workers=int(config.workers),
+                                               pin_memory=True)
         # training loop
         best = 0 
 
