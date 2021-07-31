@@ -357,7 +357,7 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
                 w_normal.append((torch.argmax(alpha, 1).cpu().detach().numpy()).tolist())    
         else:
             raise NotImplemntedError('Unknown genotype extraction mode:'+mode)
-        return w_normal, w_reduce
+        return w_reduce, w_normal
                     
                 
             
