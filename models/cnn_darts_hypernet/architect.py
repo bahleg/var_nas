@@ -94,5 +94,5 @@ class HypernetArchitect(Architect):
             for p, d in zip(self.net.weights(), dw):
                 p += eps * d
 
-        hessian = [(p-n) / 2.*eps for p, n in zip(dalpha_pos, dalpha_neg)]
+        hessian = [(p-n) / (2.*eps) for p, n in zip(dalpha_pos, dalpha_neg)]
         return hessian

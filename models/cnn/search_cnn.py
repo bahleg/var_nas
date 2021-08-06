@@ -87,7 +87,9 @@ class SearchCNNController(nn.Module):
 
     def init_net(self, kwargs):
         subcfg = kwargs['darts']
-        drop = float(subcfg['drop path proba'])
+        #self.drop_init = float(subcfg['drop path proba initial'])
+        #self.drop_delta = float(subcfg['drop path proba delta'])
+
         C_in = int(subcfg['input_channels'])
         C = int(subcfg['init_channels'])
         n_classes = int(subcfg['n_classes'])
@@ -96,10 +98,13 @@ class SearchCNNController(nn.Module):
         stem_multiplier = int(subcfg['stem_multiplier'])
         
         primitives = self.get_primitives(kwargs)
-
-
+        #if self.drop_init > 0 or self.drop_delta != 0:
+        #    self.drop = torch.tensor(0.0001) # need to initialize cells properly
+        #else:
+        #    self.drop = 0.0
+          
         self.net = SearchCNN(primitives, C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier, drop)
+                             n_nodes, stem_multiplier)
                              
     def __init__(self, **kwargs):
         super().__init__()    
@@ -132,6 +137,7 @@ class SearchCNNController(nn.Module):
         self.architect = Architect(self, float(
             subcfg['optim']['w_momentum']), float(subcfg['optim']['w_weight_decay']))
         self.w_grad_clip = float(subcfg['optim']['w_grad_clip'])
+        self.epochs = int(kwargs['epochs'])
 
     def train_step(self, trn_X, trn_y, val_X, val_y):
         lr = self.lr_scheduler.get_last_lr()[0]
@@ -318,6 +324,9 @@ class SearchCNNController(nn.Module):
         self.lr_scheduler.step(epoch=e)
         self.t = self.init_t + self.delta_t*e
         self.t = torch.tensor(self.t).to(self.device)
+        #if self.drop_delta != 0.0 or self.drop_init > 0.0:
+        #     self.drop.data *= 0
+        #     self.drop_data += self.drop_init + self.drop_delta * e
 
 
     def writer_callback(self, writer,  epoch, cur_step):

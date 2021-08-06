@@ -120,7 +120,7 @@ class OneHotSearchCNNController(SearchCNNController):
 
     def init_net(self, kwargs):
         subcfg = kwargs['darts']
-        drop = float(subcfg['drop path proba'])
+        #drop = float(subcfg['drop path proba'])
         C_in = int(subcfg['input_channels'])
         C = int(subcfg['init_channels'])
         n_classes = int(subcfg['n_classes'])
@@ -135,9 +135,17 @@ class OneHotSearchCNNController(SearchCNNController):
         
         if self.aux > 0.0:
             self.aux_pos = 2*n_layers//3
-            
+        
+        self.drop_init = float(subcfg['drop path proba initial'])
+        self.drop_delta = float(subcfg['drop path proba delta'])
+        
+        if self.drop_init > 0 or self.drop_delta != 0:
+            self.drop = torch.tensor(0.0001) # need to initialize cells properly
+        else:
+            self.drop = 0.0
+
         self.net = OneHotCNN(primitives, C_in, C, n_classes, n_layers,
-                             n_nodes, stem_multiplier, drop, self.aux, input_size)
+                             n_nodes, stem_multiplier, self.drop, self.aux, input_size)
     
     def __init__(self, **kwargs):        
         SearchCNNController.__init__(self, **kwargs)
@@ -177,3 +185,11 @@ class OneHotSearchCNNController(SearchCNNController):
             return self.aux *  self.criterion(aux_logits, y) +  self.criterion(logits, y)
         return self.criterion(logits, y)
     
+
+    def new_epoch(self, e, w, l):
+        SearchCNNController.new_epoch(self, e, w, l)
+        if self.drop_delta != 0.0 or self.drop_init > 0.0:
+             self.drop.data *= 0
+             self.drop.data += self.drop_init + self.drop_delta * e
+
+

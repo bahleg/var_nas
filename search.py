@@ -48,7 +48,6 @@ def main():
         model_params['seed'] = seed
         model = controller_cls(**model_params)
         model = model.to(device)    
-
         # split data to train/validation
         n_train = len(train_data)
         
@@ -74,12 +73,12 @@ def main():
         
         else:
             logger.info('using test as validation. Use it only for the training with already defined architecture!')
-        train_loader = torch.utils.data.DataLoader(train_data,
+            train_loader = torch.utils.data.DataLoader(train_data,
                                                batch_size=int(config.batch_size),
                                                shuffle=True,
                                                num_workers=int(config.workers),
                                                pin_memory=True)
-        valid_loader = torch.utils.data.DataLoader(valid_data,
+            valid_loader = torch.utils.data.DataLoader(valid_data,
                                                batch_size=int(config.batch_size),
                                                shuffle=False,
                                                num_workers=int(config.workers),
@@ -106,7 +105,12 @@ def main():
 
             model.new_epoch(epoch, writer, logger) 
             # training
-            train_qual = train(train_loader, valid_loader, model, epoch, writer,  config, logger)        
+            if float(config.validate_split) <= 0.0:
+                val_train_loader = train_loader
+            else:
+                val_train_loader = valid_loader
+ 
+            train_qual = train(train_loader, val_train_loader, model, epoch, writer,  config, logger)        
                         
             # validation
             cur_step = (epoch+1) * len(train_loader)
@@ -153,7 +157,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
         loss = model.train_step(trn_X, trn_y, val_X, val_y)
         losses.update(loss.item(), N)
 
-        if step ==  len(train_loader)-1:
+        if  step ==  len(train_loader)-1:
             model.eval()
             logits = model(trn_X)
             model.train()
