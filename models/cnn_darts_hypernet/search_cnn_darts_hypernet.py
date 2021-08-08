@@ -342,7 +342,8 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
         if mode == 'DARTS':
             for w_out, alphas in zip((w_normal, w_reduce), (self.hyper_normal, self.hyper_reduce)):                
                 for alpha in alphas:
-                    edges = alpha(lam)
+                    edges = F.softmax(alpha(lam))
+                    print (edges)
                     edge_max, primitive_indices = torch.topk(edges[:, :-1], 1) # ignore 'none'
                     topk_edge_values, topk_edge_indices = torch.topk(edge_max.view(-1), 2) # get top-2
                     w_out.append([edges.shape[1]-1]*(len(edges)))
