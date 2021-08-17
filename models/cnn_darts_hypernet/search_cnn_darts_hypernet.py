@@ -269,7 +269,7 @@ class SearchCNNControllerWithHyperNet(SearchCNNController):
             weights = [alpha(lam_) for alpha in self.hyper_reduce] if cell.reduction else [
                 alpha(lam_) for alpha in self.hyper_normal]
             
-            weights = [F.softmax(w/self.t, dim=-1) for w in weights]
+            weights = [F.softmax(w, dim=-1) for w in weights]
             
             
                 
