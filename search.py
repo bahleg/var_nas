@@ -38,6 +38,9 @@ def main():
     model = None 
     for seed in config.seeds.split(';'):    
         seed = int(seed)
+        np.random.seed(seed+epoch)
+        torch.manual_seed(seed+epoch)
+        torch.cuda.manual_seed_all(seed+epoch)
         
         # deleting model from previous seed
         if model is not None:
@@ -147,7 +150,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
     
     model.train()
 
-    for step, ((trn_X, trn_y), (val_X, val_y)) in tqdm(enumerate(zip(train_loader, valid_loader))):
+    for step, ((trn_X, trn_y), (val_X, val_y)) in (enumerate(zip(train_loader, valid_loader))):
         trn_X, trn_y = trn_X.to(config.device, non_blocking=True), trn_y.to(
             config.device, non_blocking=True)
         val_X, val_y = val_X.to(config.device, non_blocking=True), val_y.to(

@@ -160,7 +160,7 @@ class OneHotSearchCNNController(SearchCNNController):
                self.weights_reduce.append(np.random.randint(low=0, high=alpha.shape[1], size=alpha.shape[0]).tolist())
             for alpha in self.alpha_normal:
                self.weights_normal.append(np.random.randint(low=0, high=alpha.shape[1], size=alpha.shape[0]).tolist())
-
+            print (self.weights_reduce, self.weights_normal)
         else:
             with open(kwargs['one-hot']['genotype path'].format(kwargs['seed'])) as inp:
                 self.weights_reduce, self.weights_normal = json.loads(inp.read())
