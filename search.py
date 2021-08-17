@@ -38,9 +38,9 @@ def main():
     model = None 
     for seed in config.seeds.split(';'):    
         seed = int(seed)
-        np.random.seed(seed+epoch)
-        torch.manual_seed(seed+epoch)
-        torch.cuda.manual_seed_all(seed+epoch)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
         
         # deleting model from previous seed
         if model is not None:
