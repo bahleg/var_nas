@@ -131,8 +131,8 @@ def main():
                 is_best = True
             else:
                 is_best = False
-            
-            utils.save_checkpoint(model.state_dict(), config.path, seed, epoch, is_best=is_best)
+            if is_best or epoch % int(config.save_every) == 0:
+                 utils.save_checkpoint(model.state_dict(), config.path, seed, epoch, is_best=is_best)
             logger.info("Quality{}: {} \n\n".format(
                 '*' if is_best else '', cur_qual))
 
@@ -147,7 +147,7 @@ def train(train_loader, valid_loader, model, epoch, writer,  config, logger):
     
     model.train()
 
-    for step, ((trn_X, trn_y), (val_X, val_y)) in tqdm.tqdm(enumerate(zip(train_loader, valid_loader))):
+    for step, ((trn_X, trn_y), (val_X, val_y)) in (enumerate(zip(train_loader, valid_loader))):
         trn_X, trn_y = trn_X.to(config.device, non_blocking=True), trn_y.to(
             config.device, non_blocking=True)
         val_X, val_y = val_X.to(config.device, non_blocking=True), val_y.to(
