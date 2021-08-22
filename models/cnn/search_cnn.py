@@ -332,3 +332,28 @@ class SearchCNNController(nn.Module):
     def writer_callback(self, writer,  epoch, cur_step):
         pass
 
+
+    def genotype(self, mode='DARTS'):
+        w_normal, w_reduce = [], []
+        if mode == 'DARTS':
+            for w_out, alphas in zip((w_normal, w_reduce), (self.hyper_normal, self.hyper_reduce)):
+                for alpha in alphas:
+                    edges = F.softmax(alpha)
+                    edge_max, primitive_indices = torch.topk(edges[:, :-1], 1) # ignore 'none'
+                    topk_edge_values, topk_edge_indices = torch.topk(edge_max.view(-1), 2) # get top-2
+                    w_out.append([edges.shape[1]-1]*(len(edges)))
+                    for k in topk_edge_indices:
+                        w_out[-1][k.item()] = primitive_indices[k.item()][0].item()
+        elif mode == 'simple':
+            for alpha in self.hyper_reduce:
+                alpha = F.softmax(alpha)
+                w_reduce.append((torch.argmax(alpha, 1).cpu().detach().numpy()).tolist())
+            for alpha in self.hyper_normal:
+                alpha = F.softmax(alpha)
+                w_normal.append((torch.argmax(alpha, 1).cpu().detach().numpy()).tolist())    
+        else:
+            raise NotImplemntedError('Unknown genotype extraction mode:'+mode)
+        return w_reduce, w_normal
+
+
+
