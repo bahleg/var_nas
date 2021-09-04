@@ -24,9 +24,9 @@ def calc_param_number(model, g_reduce, g_normal):
 if __name__=='__main__':
 	print ('args: <path to config> <path to checkpoint> <mode> <normzlized lambda> <path to save>')
 	config = configobj.ConfigObj(sys.argv[1])
-	config['device'] = 'cuda:0'
+	config['device'] = 'cpu'
 	model = SearchCNNControllerWithHyperNet(**config)
-	model.load_state_dict(torch.load(sys.argv[2]))
+	model.load_state_dict(torch.load(sys.argv[2], map_location='cpu'))
 	red, norm = model.genotype(torch.tensor(float(sys.argv[4])), mode=sys.argv[3])
 	print ('param num', calc_param_number(model, red, norm))
 	with open(sys.argv[-1], 'w') as out:
